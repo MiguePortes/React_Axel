@@ -49,13 +49,13 @@ const Login = () => {
             try {
           
                 await signInWithEmailAndPassword(auth, formData.email, formData.password);
-                
+                localStorage.setItem("isAuth", "true");
+                window.location.reload();  
                 setSuccessMessage('¡Inicio de sesión exitoso! Redirigiendo a tu panel de control...');
                 
-       
-                setTimeout(() => {
                     navigate('/tareas');
-                }, 2000);
+
+
             } catch (error) {
                 let errorMessage = 'Ocurrió un error durante el inicio de sesión. Inténtalo de nuevo.';
                 switch (error.code) {

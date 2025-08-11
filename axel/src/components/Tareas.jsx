@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import jsPDF from "jspdf";
 import soundFile from "/src/assets/sonido/new-notification-028-383966.mp3";
+import { useNavigate } from "react-router-dom";
 
 const categories = [
   { id: "trabajo", label: "Trabajo", color: "bg-blue-500" },
@@ -23,6 +24,16 @@ const repeatOptions = [
 ];
 
 export default function Tareas() {
+  const navigate = useNavigate();
+
+  // Comprobar si hay usuario logueado
+  useEffect(() => {
+    const user = localStorage.getItem("user");
+    if (!user) {
+      navigate("/login"); // Si no hay usuario, mandar al login
+    }
+  }, [navigate]);
+
   const [tasks, setTasks] = useState(() => {
     const saved = localStorage.getItem("tasks");
     return saved ? JSON.parse(saved) : [];
@@ -52,11 +63,7 @@ export default function Tareas() {
       const now = new Date();
       const currentTime = now.toTimeString().slice(0, 5);
       tasks.forEach((task) => {
-        if (
-          !task.completed &&
-          task.time === currentTime &&
-          !task.notified
-        ) {
+        if (!task.completed && task.time === currentTime && !task.notified) {
           playSound();
           alert(`⏰ ¡Recordatorio! Tarea: ${task.text}`);
           setTasks((prev) =>
@@ -115,30 +122,22 @@ export default function Tareas() {
     const doc = new jsPDF();
 
     doc.setFontSize(22);
-    doc.setTextColor("#1f2937"); // Tailwind gray-800
     doc.text("Plan / Tarea", 105, 25, null, null, "center");
-
     doc.setFontSize(14);
-    doc.setTextColor("#374151"); // Tailwind gray-700
     doc.text(`Descripción: ${task.text}`, 20, 50);
     doc.text(`Hora: ${task.time}`, 20, 60);
-
     const categoryLabel =
       categories.find((cat) => cat.id === task.category)?.label || "";
     doc.text(`Categoría: ${categoryLabel}`, 20, 70);
-
     const priorityLabel =
       priorityOptions.find((p) => p.id === task.priority)?.label || "Media";
     doc.text(`Prioridad: ${priorityLabel}`, 20, 80);
-
     const repeatLabel =
       repeatOptions.find((opt) => opt.id === task.repeat)?.label || "Ninguno";
     doc.text(`Repetición: ${repeatLabel}`, 20, 90);
-
     if (task.tags && task.tags.length > 0) {
       doc.text(`Etiquetas: ${task.tags.join(", ")}`, 20, 100);
     }
-
     doc.save(`tarea_${task.id}.pdf`);
   };
 
@@ -156,6 +155,12 @@ export default function Tareas() {
     }
   }, [darkMode]);
 
+  // Cerrar sesión
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    navigate("/login");
+  };
+
   return (
     <div
       className={`max-w-5xl mx-auto p-8 rounded-lg shadow-lg ${
@@ -164,25 +169,29 @@ export default function Tareas() {
     >
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-5xl font-extrabold tracking-wide select-none">
-          Planificador de Tareas
-        </h1>
-        <button
-          onClick={() => setDarkMode(!darkMode)}
-          className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 rounded-lg shadow-lg hover:from-purple-600 hover:to-indigo-600 transition font-semibold"
-          aria-label="Cambiar modo oscuro"
-          title="Cambiar modo oscuro"
-        >
-          {darkMode ? "Modo Claro" : "Modo Oscuro"}
-        </button>
+        <h1 className="text-5xl font-extrabold tracking-wide">Planificador de Tareas</h1>
+        <div className="flex gap-3">
+          <button
+            onClick={() => setDarkMode(!darkMode)}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 rounded-lg shadow-lg hover:from-purple-600 hover:to-indigo-600 transition font-semibold"
+          >
+            {darkMode ? "Modo Claro" : "Modo Oscuro"}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg hover:bg-red-700 transition font-semibold"
+          >
+            Cerrar Sesión
+          </button>
+        </div>
       </div>
 
       {/* Filtros */}
       <div className="flex gap-4 mb-8 flex-wrap justify-center">
         <select
-          className="p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
           value={filterCategory}
           onChange={(e) => setFilterCategory(e.target.value)}
+          className="p-3 border rounded-lg"
         >
           <option value="all">Todas las Categorías</option>
           {categories.map((cat) => (
@@ -192,9 +201,9 @@ export default function Tareas() {
           ))}
         </select>
         <select
-          className="p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200"
           value={filterPriority}
           onChange={(e) => setFilterPriority(e.target.value)}
+          className="p-3 border rounded-lg"
         >
           <option value="all">Todas las Prioridades</option>
           {priorityOptions.map((p) => (
@@ -212,18 +221,18 @@ export default function Tareas() {
           placeholder="Descripción de la tarea..."
           value={taskText}
           onChange={(e) => setTaskText(e.target.value)}
-          className="col-span-3 p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 transition"
+          className="col-span-3 p-3 border rounded-lg"
         />
         <input
           type="time"
           value={taskTime}
           onChange={(e) => setTaskTime(e.target.value)}
-          className="p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 transition"
+          className="p-3 border rounded-lg"
         />
         <select
           value={taskCategory}
           onChange={(e) => setTaskCategory(e.target.value)}
-          className="p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 transition"
+          className="p-3 border rounded-lg"
         >
           {categories.map((cat) => (
             <option key={cat.id} value={cat.id}>
@@ -234,7 +243,7 @@ export default function Tareas() {
         <select
           value={taskPriority}
           onChange={(e) => setTaskPriority(e.target.value)}
-          className="p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 transition"
+          className="p-3 border rounded-lg"
         >
           {priorityOptions.map((p) => (
             <option key={p.id} value={p.id}>
@@ -247,23 +256,20 @@ export default function Tareas() {
           placeholder="Etiquetas (separar con coma)"
           value={taskTags}
           onChange={(e) => setTaskTags(e.target.value)}
-          className="col-span-2 p-3 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-200 transition"
+          className="col-span-2 p-3 border rounded-lg"
         />
         <button
           onClick={addTask}
-          className="col-span-1 bg-gradient-to-r from-green-400 to-blue-500 text-white px-6 py-3 rounded-lg shadow-lg hover:from-blue-500 hover:to-green-400 transition font-semibold"
-          aria-label="Agregar tarea"
+          className="col-span-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition font-semibold"
         >
           Agregar
         </button>
       </div>
 
       {/* Lista de tareas */}
-      <ul className="max-h-[480px] overflow-y-auto space-y-5 scrollbar-thin scrollbar-thumb-indigo-500 scrollbar-track-gray-200 dark:scrollbar-thumb-indigo-700 dark:scrollbar-track-gray-700">
+      <ul className="space-y-5">
         {filteredTasks.length === 0 && (
-          <p className="text-center text-gray-500 dark:text-gray-400 font-medium select-none">
-            No hay tareas para mostrar.
-          </p>
+          <p className="text-center text-gray-500">No hay tareas para mostrar.</p>
         )}
         {filteredTasks.map((task) => {
           const cat = categories.find((c) => c.id === task.category);
@@ -271,7 +277,7 @@ export default function Tareas() {
           return (
             <li
               key={task.id}
-              className={`flex justify-between items-center bg-white dark:bg-gray-800 p-5 rounded-2xl shadow-md hover:shadow-xl transition duration-300 ${
+              className={`flex justify-between items-center p-5 rounded-2xl shadow-md ${
                 task.completed ? "opacity-60" : ""
               }`}
             >
@@ -280,57 +286,32 @@ export default function Tareas() {
                   type="checkbox"
                   checked={task.completed}
                   onChange={() => toggleComplete(task.id)}
-                  className="w-6 h-6 rounded text-indigo-600 focus:ring-indigo-500"
+                  className="w-6 h-6"
                 />
                 <div className="truncate">
                   <p
                     className={`text-lg font-semibold truncate ${
                       task.completed ? "line-through text-gray-400" : ""
                     }`}
-                    title={task.text}
                   >
                     {task.text}
                   </p>
-                  <p className="text-sm text-gray-600 dark:text-gray-300 truncate">
-                    {task.time} •{" "}
-                    {cat && (
-                      <>
-                        <span
-                          className={`inline-block w-4 h-4 rounded-full mr-1 align-middle ${cat.color}`}
-                          title={cat.label}
-                        ></span>
-                        {cat.label} •{" "}
-                      </>
-                    )}
-                    {prio && (
-                      <>
-                        <span
-                          className={`inline-block w-4 h-4 rounded-full mr-1 align-middle ${prio.color}`}
-                          title={prio.label}
-                        ></span>
-                        {prio.label} •{" "}
-                      </>
-                    )}
-                    Etiquetas:{" "}
-                    {Array.isArray(task.tags) && task.tags.length > 0
-                      ? task.tags.join(", ")
-                      : "—"}
+                  <p className="text-sm text-gray-600">
+                    {task.time} • {cat?.label} • {prio?.label} • Etiquetas:{" "}
+                    {task.tags?.length > 0 ? task.tags.join(", ") : "—"}
                   </p>
                 </div>
               </div>
-
               <div className="flex space-x-3 ml-5">
                 <button
                   onClick={() => exportTaskToPDF(task)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg shadow hover:bg-indigo-700 transition"
-                  aria-label={`Exportar tarea ${task.text} a PDF`}
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg"
                 >
                   📄 PDF
                 </button>
                 <button
                   onClick={() => deleteTask(task.id)}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg shadow hover:bg-red-700 transition"
-                  aria-label={`Eliminar tarea ${task.text}`}
+                  className="bg-red-600 text-white px-4 py-2 rounded-lg"
                 >
                   🗑️
                 </button>
