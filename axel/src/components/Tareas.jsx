@@ -1,325 +1,278 @@
-import React, { useState, useEffect } from "react";
-import jsPDF from "jspdf";
-import soundFile from "/src/assets/sonido/new-notification-028-383966.mp3";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { collection, onSnapshot, query, addDoc, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useAppContext } from '../AppContext';
+import { Loader, PlusCircle, Check, Trash2, XCircle, Menu, Mic, List, CheckSquare } from 'lucide-react';
+import { motion } from 'framer-motion';
 
-const categories = [
-  { id: "trabajo", label: "Trabajo", color: "bg-blue-500" },
-  { id: "personal", label: "Personal", color: "bg-green-500" },
-  { id: "estudio", label: "Estudio", color: "bg-yellow-400" },
-  { id: "salud", label: "Salud", color: "bg-red-500" },
-];
+const Tareas = () => {
+    const location = useLocation();
+    const navigate = useNavigate();
+    const { user, db, appId, loading: appLoading } = useAppContext();
+    const [tasks, setTasks] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [newTaskTitle, setNewTaskTitle] = useState('');
+    const [filter, setFilter] = useState('pending');
+    const [showModal, setShowModal] = useState(false);
+    const [taskIdToDelete, setTaskIdToDelete] = useState(null);
+    const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-const priorityOptions = [
-  { id: "alta", label: "Alta", color: "bg-red-600" },
-  { id: "media", label: "Media", color: "bg-yellow-500" },
-  { id: "baja", label: "Baja", color: "bg-green-600" },
-];
+    useEffect(() => {
+        const queryParams = new URLSearchParams(location.search);
+        const status = queryParams.get('status');
+        if (status === 'completed') {
+            setFilter('completed');
+        } else {
+            setFilter('pending');
+        }
+    }, [location.search]);
 
-const repeatOptions = [
-  { id: "none", label: "Ninguno" },
-  { id: "daily", label: "Diario" },
-  { id: "weekly", label: "Semanal" },
-  { id: "monthly", label: "Mensual" },
-];
+    useEffect(() => {
+        if (!user || !db || !appId) return;
 
-export default function Tareas() {
-  const navigate = useNavigate();
+        const tasksColRef = collection(db, `artifacts/${appId}/users/${user.uid}/tasks`);
+        const q = query(tasksColRef);
+        setIsLoading(true);
 
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const tasksData = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setTasks(tasksData);
+            setIsLoading(false);
+        }, (err) => {
+            console.error("Error al obtener tareas:", err);
+            setIsLoading(false);
+        });
 
-  useEffect(() => {
-    const user = localStorage.getItem("user");
-    if (!user) {
-      navigate("/login"); 
-    }
-  }, [navigate]);
+        return unsubscribe;
+    }, [user, db, appId]);
 
-  const [tasks, setTasks] = useState(() => {
-    const saved = localStorage.getItem("tasks");
-    return saved ? JSON.parse(saved) : [];
-  });
+    const handleAddTask = async (e) => {
+        e.preventDefault();
+        if (newTaskTitle.trim() === '') return;
 
-  const [taskText, setTaskText] = useState("");
-  const [taskTime, setTaskTime] = useState("");
-  const [taskCategory, setTaskCategory] = useState(categories[0].id);
-  const [taskPriority, setTaskPriority] = useState("media");
-  const [taskRepeat, setTaskRepeat] = useState("none");
-  const [taskTags, setTaskTags] = useState("");
-  const [darkMode, setDarkMode] = useState(false);
-  const [filterCategory, setFilterCategory] = useState("all");
-  const [filterPriority, setFilterPriority] = useState("all");
+        try {
+            const tasksColRef = collection(db, `artifacts/${appId}/users/${user.uid}/tasks`);
+            await addDoc(tasksColRef, {
+                title: newTaskTitle,
+                completed: false,
+                createdAt: new Date(),
+            });
+            setNewTaskTitle('');
+        } catch (e) {
+            console.error("Error al añadir tarea: ", e);
+        }
+    };
 
-  useEffect(() => {
-    localStorage.setItem("tasks", JSON.stringify(tasks));
-  }, [tasks]);
+    const handleToggleComplete = async (taskId, completed) => {
+        try {
+            const taskDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/tasks`, taskId);
+            await updateDoc(taskDocRef, {
+                completed: !completed,
+            });
+        } catch (e) {
+            console.error("Error al actualizar tarea: ", e);
+        }
+    };
 
-  const playSound = () => {
-    const audio = new Audio(soundFile);
-    audio.play().catch(() => {});
-  };
+    const handleDeleteTask = async () => {
+        if (!taskIdToDelete) return;
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      const currentTime = now.toTimeString().slice(0, 5);
-      tasks.forEach((task) => {
-        if (!task.completed && task.time === currentTime && !task.notified) {
-          playSound();
-          alert(`⏰ ¡Recordatorio! Tarea: ${task.text}`);
-          setTasks((prev) =>
-            prev.map((t) =>
-              t.id === task.id ? { ...t, notified: true } : t
-            )
-          );
-        }
-      });
-    }, 60000);
+        try {
+            const taskDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/tasks`, taskIdToDelete);
+            await deleteDoc(taskDocRef);
+            setShowModal(false);
+            setTaskIdToDelete(null);
+        } catch (e) {
+            console.error("Error al eliminar tarea: ", e);
+        }
+    };
 
-    return () => clearInterval(interval);
-  }, [tasks]);
+    const openModal = (taskId) => {
+        setTaskIdToDelete(taskId);
+        setShowModal(true);
+    };
 
-  const addTask = () => {
-    if (!taskText.trim() || !taskTime) {
-      alert("Por favor escribe una tarea y selecciona la hora");
-      return;
-    }
-    const newTask = {
-      id: Date.now(),
-      text: taskText,
-      time: taskTime,
-      category: taskCategory,
-      priority: taskPriority,
-      repeat: taskRepeat,
-      tags: taskTags
-        .split(",")
-        .map((t) => t.trim())
-        .filter((t) => t.length > 0),
-      completed: false,
-      notified: false,
-    };
-    setTasks([...tasks, newTask]);
-    setTaskText("");
-    setTaskTime("");
-    setTaskCategory(categories[0].id);
-    setTaskPriority("media");
-    setTaskRepeat("none");
-    setTaskTags("");
-  };
+    const closeModal = () => {
+        setShowModal(false);
+        setTaskIdToDelete(null);
+    };
 
-  const toggleComplete = (id) => {
-    setTasks(
-      tasks.map((task) =>
-        task.id === id ? { ...task, completed: !task.completed } : task
-      )
-    );
-  };
+    const toggleSidebar = () => {
+        setIsSidebarOpen(!isSidebarOpen);
+    };
 
-  const deleteTask = (id) => {
-    setTasks(tasks.filter((task) => task.id !== id));
-  };
+    if (isLoading || appLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <Loader size={48} className="animate-spin text-blue-500" />
+            </div>
+        );
+    }
 
-  const exportTaskToPDF = (task) => {
-    const doc = new jsPDF();
+    const filteredTasks = tasks ? tasks.filter(task => task.completed === (filter === 'completed')) : [];
 
-    doc.setFontSize(22);
-    doc.text("Plan / Tarea", 105, 25, null, null, "center");
-    doc.setFontSize(14);
-    doc.text(`Descripción: ${task.text}`, 20, 50);
-    doc.text(`Hora: ${task.time}`, 20, 60);
-    const categoryLabel =
-      categories.find((cat) => cat.id === task.category)?.label || "";
-    doc.text(`Categoría: ${categoryLabel}`, 20, 70);
-    const priorityLabel =
-      priorityOptions.find((p) => p.id === task.priority)?.label || "Media";
-    doc.text(`Prioridad: ${priorityLabel}`, 20, 80);
-    const repeatLabel =
-      repeatOptions.find((opt) => opt.id === task.repeat)?.label || "Ninguno";
-    doc.text(`Repetición: ${repeatLabel}`, 20, 90);
-    if (task.tags && task.tags.length > 0) {
-      doc.text(`Etiquetas: ${task.tags.join(", ")}`, 20, 100);
-    }
-    doc.save(`tarea_${task.id}.pdf`);
-  };
+    return (
+        <div className="flex flex-col bg-gray-100 min-h-screen text-gray-800">
+            {/* Sidebar para pantallas pequeñas */}
+            <motion.div
+                initial={{ x: -300 }}
+                animate={{ x: isSidebarOpen ? 0 : -300 }}
+                transition={{ duration: 0.3 }}
+                className="fixed top-0 left-0 bottom-0 w-64 bg-white shadow-xl p-4 z-50 flex flex-col md:hidden"
+            >
+                <button onClick={toggleSidebar} className="self-end mb-4 text-gray-400 hover:text-gray-800 transition-colors">
+                    <XCircle size={28} />
+                </button>
+                <nav className="flex-grow space-y-2">
+                    <button
+                        onClick={() => {
+                            navigate('/');
+                            toggleSidebar();
+                        }}
+                        className="flex items-center w-full px-3 py-2 rounded-lg transition-colors hover:bg-gray-200"
+                    >
+                        <List size={20} className="mr-3" />
+                        Volver a listas
+                    </button>
+                    <button
+                        onClick={() => {
+                            navigate('/calendario');
+                            toggleSidebar();
+                        }}
+                        className="flex items-center w-full px-3 py-2 rounded-lg transition-colors hover:bg-gray-200"
+                    >
+                        <CheckSquare size={20} className="mr-3" />
+                        Calendario
+                    </button>
+                </nav>
+            </motion.div>
 
-  const filteredTasks = tasks.filter((task) => {
-    if (filterCategory !== "all" && task.category !== filterCategory) return false;
-    if (filterPriority !== "all" && task.priority !== filterPriority) return false;
-    return true;
-  });
+            {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden" onClick={toggleSidebar}></div>}
 
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-  }, [darkMode]);
+            {/* Main Content */}
+            <div className="flex-grow p-4 md:p-8 transition-all duration-300">
+                <header className="flex items-center justify-between mb-8">
+                    {/* Botón de hamburguesa para pantallas pequeñas */}
+                    <button onClick={toggleSidebar} className="text-gray-600 hover:text-gray-800 transition-colors md:hidden">
+                        <Menu size={28} />
+                    </button>
+                    {/* Navegación para pantallas grandes */}
+                    <nav className="hidden md:flex flex-grow space-x-4 justify-start items-center">
+                        <button
+                            onClick={() => navigate('/')}
+                            className="flex items-center px-3 py-2 rounded-lg transition-colors hover:bg-gray-200 text-gray-600 hover:text-gray-800"
+                        >
+                            <List size={20} className="mr-2" />
+                            Volver a listas
+                        </button>
+                        <button
+                            onClick={() => navigate('/calendario')}
+                            className="flex items-center px-3 py-2 rounded-lg transition-colors hover:bg-gray-200 text-gray-600 hover:text-gray-800"
+                        >
+                            <CheckSquare size={20} className="mr-2" />
+                            Calendario
+                        </button>
+                    </nav>
+                    <h1 className="text-2xl md:text-3xl font-extrabold text-center flex-grow">
+                        {filter === 'pending' ? 'Tareas Pendientes' : 'Tareas Completadas'}
+                    </h1>
+                    <div className="w-8 md:w-auto"></div> {/* Spacer to center the title */}
+                </header>
 
-  // Cerrar sesión
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    navigate("/login");
-  };
+                <main className="max-w-3xl mx-auto space-y-4">
+                    {filter === 'pending' && (
+                        <form onSubmit={handleAddTask} className="flex items-center space-x-2 bg-white p-3 rounded-xl shadow-lg">
+                            <input
+                                type="text"
+                                value={newTaskTitle}
+                                onChange={(e) => setNewTaskTitle(e.target.value)}
+                                placeholder="Añadir una nueva tarea..."
+                                className="flex-grow bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none"
+                            />
+                            {/* Aquí se quita el icono duplicado */}
+                            <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full transition-colors">
+                                <span className="sr-only">Añadir</span> {/* Para accesibilidad */}
+                                <PlusCircle size={24} />
+                            </button>
+                        </form>
+                    )}
 
-  return (
-    <div
-      className={`max-w-5xl mx-auto p-8 rounded-lg shadow-lg ${
-        darkMode ? "bg-gray-900 text-white" : "bg-white text-gray-900"
-      }`}
-    >
-      {/* Header */}
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-5xl font-extrabold tracking-wide">Planificador de Tareas</h1>
-        <div className="flex gap-3">
-          <button
-            onClick={() => setDarkMode(!darkMode)}
-            className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 rounded-lg shadow-lg hover:from-purple-600 hover:to-indigo-600 transition font-semibold"
-          >
-            {darkMode ? "Modo Claro" : "Modo Oscuro"}
-          </button>
-          <button
-            onClick={handleLogout}
-            className="bg-red-600 text-white px-5 py-3 rounded-lg shadow-lg hover:bg-red-700 transition font-semibold"
-          >
-            Cerrar Sesión
-          </button>
-        </div>
-      </div>
+                    {filteredTasks.length > 0 ? (
+                        filteredTasks.map(task => (
+                            <motion.div
+                                key={task.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                transition={{ duration: 0.3 }}
+                                className="bg-white rounded-xl shadow-lg p-4 flex items-center justify-between transition-transform duration-200 ease-in-out transform hover:scale-[1.02]"
+                            >
+                                <span className={`flex-grow text-lg ${task.completed ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+                                    {task.title}
+                                </span>
+                                <div className="flex space-x-2">
+                                    <button
+                                        onClick={() => handleToggleComplete(task.id, task.completed)}
+                                        className={`p-2 rounded-full transition-colors ${task.completed ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'}`}
+                                    >
+                                        <Check size={20} className="text-white" />
+                                    </button>
+                                    <button
+                                        onClick={() => openModal(task.id)}
+                                        className="p-2 rounded-full bg-red-500 hover:bg-red-600 transition-colors"
+                                    >
+                                        <Trash2 size={20} className="text-white" />
+                                    </button>
+                                </div>
+                            </motion.div>
+                        ))
+                    ) : (
+                        <motion.p
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.5 }}
+                            className="text-center text-gray-500 mt-10 p-4"
+                        >
+                            {filter === 'pending' ? 'No tienes tareas pendientes. ¡Todo listo!' : 'No hay tareas completadas todavía.'}
+                        </motion.p>
+                    )}
+                </main>
 
-      {/* Filtros */}
-      <div className="flex gap-4 mb-8 flex-wrap justify-center">
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          className="p-3 border rounded-lg"
-        >
-          <option value="all">Todas las Categorías</option>
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filterPriority}
-          onChange={(e) => setFilterPriority(e.target.value)}
-          className="p-3 border rounded-lg"
-        >
-          <option value="all">Todas las Prioridades</option>
-          {priorityOptions.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-      </div>
+                {showModal && (
+                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white rounded-xl p-6 shadow-2xl text-center max-w-sm mx-auto text-gray-800"
+                        >
+                            <h2 className="text-xl font-bold mb-4">Confirmar Eliminación</h2>
+                            <p className="text-gray-600 mb-6">¿Estás seguro de que quieres eliminar esta tarea?</p>
+                            <div className="flex justify-center space-x-4">
+                                <button
+                                    onClick={handleDeleteTask}
+                                    className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+                                >
+                                    Eliminar
+                                </button>
+                                <button
+                                    onClick={closeModal}
+                                    className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </div>
+            
+          
+        </div>
+    );
+};
 
-   
-      <div className="grid grid-cols-1 md:grid-cols-7 gap-4 mb-12 items-center">
-        <input
-          type="text"
-          placeholder="Descripción de la tarea..."
-          value={taskText}
-          onChange={(e) => setTaskText(e.target.value)}
-          className="col-span-3 p-3 border rounded-lg"
-        />
-        <input
-          type="time"
-          value={taskTime}
-          onChange={(e) => setTaskTime(e.target.value)}
-          className="p-3 border rounded-lg"
-        />
-        <select
-          value={taskCategory}
-          onChange={(e) => setTaskCategory(e.target.value)}
-          className="p-3 border rounded-lg"
-        >
-          {categories.map((cat) => (
-            <option key={cat.id} value={cat.id}>
-              {cat.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={taskPriority}
-          onChange={(e) => setTaskPriority(e.target.value)}
-          className="p-3 border rounded-lg"
-        >
-          {priorityOptions.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
-        <input
-          type="text"
-          placeholder="Etiquetas (separar con coma)"
-          value={taskTags}
-          onChange={(e) => setTaskTags(e.target.value)}
-          className="col-span-2 p-3 border rounded-lg"
-        />
-        <button
-          onClick={addTask}
-          className="col-span-1 bg-green-500 text-white px-6 py-3 rounded-lg hover:bg-green-600 transition font-semibold"
-        >
-          Agregar
-        </button>
-      </div>
-
-  
-      <ul className="space-y-5">
-        {filteredTasks.length === 0 && (
-          <p className="text-center text-gray-500">No hay tareas para mostrar.</p>
-        )}
-        {filteredTasks.map((task) => {
-          const cat = categories.find((c) => c.id === task.category);
-          const prio = priorityOptions.find((p) => p.id === task.priority);
-          return (
-            <li
-              key={task.id}
-              className={`flex justify-between items-center p-5 rounded-2xl shadow-md ${
-                task.completed ? "opacity-60" : ""
-              }`}
-            >
-              <div className="flex items-center space-x-5 flex-1 min-w-0">
-                <input
-                  type="checkbox"
-                  checked={task.completed}
-                  onChange={() => toggleComplete(task.id)}
-                  className="w-6 h-6"
-                />
-                <div className="truncate">
-                  <p
-                    className={`text-lg font-semibold truncate ${
-                      task.completed ? "line-through text-gray-400" : ""
-                    }`}
-                  >
-                    {task.text}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {task.time} • {cat?.label} • {prio?.label} • Etiquetas:{" "}
-                    {task.tags?.length > 0 ? task.tags.join(", ") : "—"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex space-x-3 ml-5">
-                <button
-                  onClick={() => exportTaskToPDF(task)}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg"
-                >
-                  📄 PDF
-                </button>
-                <button
-                  onClick={() => deleteTask(task.id)}
-                  className="bg-red-600 text-white px-4 py-2 rounded-lg"
-                >
-                  🗑️
-                </button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
-}
+export default Tareas;

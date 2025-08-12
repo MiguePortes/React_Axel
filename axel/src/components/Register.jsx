@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, User, Mail, Lock, Check, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
-import { auth, db } from '../firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
+
+import { registerUser } from '../firebase'; 
 
 import logo from "../assets/img/logo.png";
 import videoBackground from "../assets/video/Fondo.mp4"; 
@@ -99,17 +99,11 @@ const Register = () => {
         e.preventDefault();
         if (validateForm()) {
             try {
-                const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-                const user = userCredential.user;
-                
-                const userDocRef = doc(db, `users/${user.uid}`);
-                await setDoc(userDocRef, {
-                    name: formData.name,
-                    email: user.email,
-                    createdAt: new Date(),
-                });
+                // Llama a la función centralizada de Firebase
+                await registerUser(formData.email, formData.password, formData.name);
 
                 setSuccessMessage('¡Registro exitoso! Redirigiendo a la página de inicio de sesión.');
+                toast.success('¡Registro exitoso!');
                 
                 setTimeout(() => {
                     navigate('/login');
@@ -131,6 +125,7 @@ const Register = () => {
                 }
                 setErrors({ general: errorMessage });
                 setSuccessMessage('');
+                toast.error(errorMessage);
                 console.error("Error de registro:", error);
             }
         } else {
@@ -139,9 +134,7 @@ const Register = () => {
     };
 
     return (
-        <div 
-            className="flex items-center justify-center min-h-screen p-4 md:p-6 font-inter text-gray-800 relative overflow-hidden"
-        >
+        <div className="flex items-center justify-center min-h-screen p-4 md:p-6 font-inter text-gray-800 relative overflow-hidden">
             <video
                 autoPlay
                 loop
@@ -152,15 +145,10 @@ const Register = () => {
                 Tu navegador no soporta el tag de video.
             </video>
             <div className="absolute inset-0 bg-gradient-to-br from-blue-900/60 to-blue-500/20"></div>
-
             <div className="relative z-10 w-full max-w-xs md:max-w-sm h-auto flex flex-col bg-white/70 backdrop-blur-sm shadow-2xl p-4 md:p-8 rounded-2xl overflow-hidden border border-white/20">
                 <div className="flex flex-col items-center mb-5">
                     <div className="bg-transparent p-1 rounded-lg border border-white/50 shadow-sm">
-                        <img
-                            src={logo}
-                            alt="Logo"
-                            className="w-16 h-auto"
-                        />
+                        <img src={logo} alt="Logo" className="w-16 h-auto" />
                     </div>
                     <h2 className="text-xl md:text-2xl font-bold text-gray-900 drop-shadow-lg mt-3">
                         Registrarse
