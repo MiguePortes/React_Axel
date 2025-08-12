@@ -3,11 +3,13 @@ import { Eye, EyeOff, User, Mail, Lock, Check, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
-
 import { registerUser } from '../firebase'; 
-
 import logo from "../assets/img/logo.png";
 import videoBackground from "../assets/video/Fondo.mp4"; 
+
+const PasswordValidationIcon = ({ isValid }) => {
+    return isValid ? <Check size={12} /> : <X size={12} />;
+};
 
 const Register = () => {
     const navigate = useNavigate();
@@ -218,21 +220,21 @@ const Register = () => {
                         </div>
                         {isFocused && (
                             <div className="mt-2 text-xs grid grid-cols-1 md:grid-cols-2 gap-1 text-gray-600">
-                                <p className={`flex items-center gap-1 ${passwordValidation.length ? 'text-green-700' : 'text-red-700'}`}>
-                                    {passwordValidation.length ? <Check size={12} /> : <X size={12} />} 8 o más caracteres
-                                </p>
-                                <p className={`flex items-center gap-1 ${passwordValidation.uppercase ? 'text-green-700' : 'text-red-700'}`}>
-                                    {passwordValidation.uppercase ? <Check size={12} /> : <X size={12} />} Una mayúscula
-                                </p>
-                                <p className={`flex items-center gap-1 ${passwordValidation.lowercase ? 'text-green-700' : 'text-red-700'}`}>
-                                    {passwordValidation.lowercase ? <Check size={12} /> : <X size={12} />} Una minúscula
-                                </p>
-                                <p className={`flex items-center gap-1 ${passwordValidation.number ? 'text-green-700' : 'text-red-700'}`}>
-                                    {passwordValidation.number ? <Check size={12} /> : <X size={12} />} Un número
-                                </p>
-                                <p className={`flex items-center gap-1 ${passwordValidation.symbol ? 'text-green-700' : 'text-red-700'}`}>
-                                    {passwordValidation.symbol ? <Check size={12} /> : <X size={12} />} Un símbolo especial
-                                </p>
+                                <div className={`flex items-center gap-1 ${passwordValidation.length ? 'text-green-700' : 'text-red-700'}`}>
+                                    <PasswordValidationIcon isValid={passwordValidation.length} /> 8 o más caracteres
+                                </div>
+                                <div className={`flex items-center gap-1 ${passwordValidation.uppercase ? 'text-green-700' : 'text-red-700'}`}>
+                                    <PasswordValidationIcon isValid={passwordValidation.uppercase} /> Una mayúscula
+                                </div>
+                                <div className={`flex items-center gap-1 ${passwordValidation.lowercase ? 'text-green-700' : 'text-red-700'}`}>
+                                    <PasswordValidationIcon isValid={passwordValidation.lowercase} /> Una minúscula
+                                </div>
+                                <div className={`flex items-center gap-1 ${passwordValidation.number ? 'text-green-700' : 'text-red-700'}`}>
+                                    <PasswordValidationIcon isValid={passwordValidation.number} /> Un número
+                                </div>
+                                <div className={`flex items-center gap-1 ${passwordValidation.symbol ? 'text-green-700' : 'text-red-700'}`}>
+                                    <PasswordValidationIcon isValid={passwordValidation.symbol} /> Un símbolo especial
+                                </div>
                             </div>
                         )}
                         {errors.password && <p className="mt-1 text-xs text-red-700">{errors.password}</p>}

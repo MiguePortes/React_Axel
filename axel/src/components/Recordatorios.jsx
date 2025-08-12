@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, onSnapshot, doc, deleteDoc, runTransaction, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, doc, deleteDoc, updateDoc, query, where } from 'firebase/firestore';
 import { CalendarClock, PlusCircle, Trash2, Edit2, Info, Loader } from 'lucide-react';
 import moment from 'moment';
+import 'moment/locale/es'; // Importa el idioma español para moment
 import { useAppContext } from '../AppContext';
 import { AnimatePresence, motion } from 'framer-motion';
 
@@ -14,29 +15,20 @@ const Recordatorios = () => {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [reminderToDelete, setReminderToDelete] = useState(null);
 
+    moment.locale('es'); // Establece el idioma globalmente
 
-    const moveExpiredToHistory = async (expiredReminders) => {
+    const markAsCompleted = async (expiredReminders) => {
         if (!user || !db || !appId || expiredReminders.length === 0) return;
-
-        console.log(`Movido ${expiredReminders.length} recordatorio(s) al historial.`);
         try {
-            await runTransaction(db, async (transaction) => {
-                for (const reminder of expiredReminders) {
-                    const oldReminderRef = doc(db, `artifacts/${appId}/users/${user.uid}/reminders`, reminder.id);
-                    const historyCollectionRef = collection(db, `artifacts/${appId}/users/${user.uid}/history`);
-                    
-                  
-                    transaction.set(doc(historyCollectionRef), {
-                        ...reminder,
-                        movedAt: new Date(),
-                    });
-                    
-                   
-                    transaction.delete(oldReminderRef);
-                }
-            });
+            for (const reminder of expiredReminders) {
+                const reminderRef = doc(db, `artifacts/${appId}/users/${user.uid}/reminders`, reminder.id);
+                await updateDoc(reminderRef, {
+                    completed: true,
+                    completedAt: new Date(),
+                });
+            }
         } catch (error) {
-            console.error("Transaction failed: ", error);
+            console.error("Error al marcar recordatorios como completados: ", error);
         }
     };
 
@@ -46,22 +38,20 @@ const Recordatorios = () => {
             return;
         }
 
-        const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/reminders`));
+        const q = query(collection(db, `artifacts/${appId}/users/${user.uid}/reminders`), where("completed", "==", false));
         
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const now = new Date();
-            const items = snapshot.docs.map(doc => ({
+            const now = moment();
+            const allReminders = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data(),
             }));
+            
+            const expired = allReminders.filter(r => r.reminderTime && moment(r.reminderTime.toDate()).isBefore(now));
+            const active = allReminders.filter(r => !r.reminderTime || moment(r.reminderTime.toDate()).isSameOrAfter(now));
 
-           
-            const expired = items.filter(r => r.reminderTime && r.reminderTime.toDate() < now);
-            const active = items.filter(r => !r.reminderTime || r.reminderTime.toDate() >= now);
-
-        
             if (expired.length > 0) {
-                moveExpiredToHistory(expired);
+                markAsCompleted(expired);
             }
 
             setReminders(active);
@@ -84,7 +74,6 @@ const Recordatorios = () => {
 
         try {
             await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/reminders`, reminderToDelete.id));
-            console.log("Recordatorio eliminado con éxito.");
         } catch (error) {
             console.error("Error al eliminar el recordatorio:", error);
         } finally {
@@ -108,10 +97,7 @@ const Recordatorios = () => {
     return (
         <div className="max-w-xl mx-auto p-4 pt-20 space-y-6 bg-gray-100 dark:bg-gray-900 min-h-screen">
             <h1 className="text-3xl font-bold text-gray-800 dark:text-white text-center mb-6">Mis Recordatorios</h1>
-            <p className="text-gray-600 dark:text-gray-400 text-center text-sm">
-                Tu ID de usuario es: <span className="font-mono text-sm">{user?.uid}</span>
-            </p>
-
+            
             <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl shadow-xl">
                 <h2 className="text-xl font-semibold mb-4 text-gray-700 dark:text-gray-200 flex items-center">
                     <CalendarClock size={20} className="text-blue-500 mr-2" />
@@ -162,14 +148,13 @@ const Recordatorios = () => {
             </div>
 
             <button
-                onClick={() => navigate('/tarea/new')}
+                onClick={() => navigate('/recordatorio/new')}
                 className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg shadow-md hover:bg-blue-700 transition-colors mt-6"
             >
                 <PlusCircle size={20} className="mr-2" />
                 Crear nuevo recordatorio
             </button>
-
-        
+            
             <AnimatePresence>
                 {showDeleteModal && (
                     <motion.div
